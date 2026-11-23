@@ -92,6 +92,29 @@ Mọi mã đã nhận nằm trong **Mã xác nhận** trên thanh công cụ.
 Bấm X sẽ thu nhỏ ứng dụng xuống khay hệ thống để vẫn nhận thông báo; chuột phải biểu tượng ở
 khay → **Thoát** để tắt hẳn.
 
+## Hộp thư đã đăng ký
+
+Danh sách bên trái có 2 thẻ: **Chưa dùng** và **Đã đăng ký**. Ứng dụng tự nhận biết một hộp đã
+được dùng để đăng ký khi nó nhận **thư xác nhận / mã**, **thư chào mừng** hoặc **thư đăng nhập /
+bảo mật** từ một dịch vụ, rồi chuyển hộp sang **Đã đăng ký** với nhãn dịch vụ (nhận ra qua tên
+miền người gửi, vd `account.meta.com` → Meta). Hộp mới tạo luôn nằm ở **Chưa dùng**, nên lấy
+địa chỉ để đăng ký từ thẻ này sẽ không bị trùng. Chuột phải để đánh dấu / bỏ đánh dấu bằng tay.
+
+**Xuất danh sách** (nút dưới danh sách) xuất đúng các hộp đang hiện, theo dạng:
+
+```
+1		Available	-	tl26fsjbws0@fexbox.org | https://tempmail.plus/	Xóa
+2		Available	-	jrnw2q5sql9@mailbox.in.ua | https://tempmail.plus/	Xóa
+```
+
+(các cột cách nhau bằng TAB), lưu ra file `.txt` hoặc sao chép vào clipboard; hoặc CSV chi tiết.
+
+## Tạo nhanh (không cần captcha)
+
+Mọi địa chỉ trên tên miền TempMail.Plus đều nhận thư ngay, không cần tạo. Captcha chỉ xuất hiện
+khi lưu **thời hạn / PIN**. Tích **Tạo nhanh** trong hộp thoại Tạo một lô để bỏ qua bước đó; thư
+khi đó được giữ theo thời hạn mặc định của trang.
+
 ## Tự cập nhật
 
 Ứng dụng kiểm tra bản mới trên GitHub Releases của repo này khi mở và mỗi 6 giờ (tắt được

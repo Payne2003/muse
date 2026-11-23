@@ -121,6 +121,14 @@ class AppSettings:
         self.storage.set_setting("tray_on_close", "1" if v else "0")
 
     @property
+    def quick_create(self) -> bool:
+        return self._flag("quick_create", "0")
+
+    @quick_create.setter
+    def quick_create(self, v: bool) -> None:
+        self.storage.set_setting("quick_create", "1" if v else "0")
+
+    @property
     def use_browser(self) -> bool:
         return self.storage.get_setting("use_browser", "1") == "1"
 
@@ -296,11 +304,23 @@ class BatchDialog(QDialog):
         form.addRow("Thời hạn", self.ttl)
         form.addRow("Tên miền", self.domain)
         form.addRow("PIN", pin_row)
+        self.quick = QCheckBox("Tạo nhanh – không cần captcha (bỏ qua lưu thời hạn/PIN)")
+        self.quick.setToolTip(
+            "Mọi địa chỉ trên tên miền TempMail.Plus đều nhận thư ngay, không cần tạo.\n"
+            "Captcha chỉ xuất hiện khi lưu thời hạn/PIN. Chọn mục này để bỏ qua bước đó:\n"
+            "thư được giữ theo thời hạn mặc định của trang (ngắn hơn 7 ngày).")
+        self.quick.setChecked(settings.quick_create)
+        self.quick.toggled.connect(lambda _: self._inputs(True))
+        form.addRow("", self.quick)
         lay.addLayout(form)
+        self._inputs(True)
 
         self.progress = QProgressBar()
         self.progress.setFormat("%v/%m")
+        self.progress.setRange(0, self.count.value())
         self.progress.setValue(0)
+        self.count.valueChanged.connect(
+            lambda v: self.thread is None and self.progress.setRange(0, v))
         self.status = QLabel("Chưa bắt đầu.")
         self.status.setWordWrap(True)
         self.log = QPlainTextEdit()
@@ -359,20 +379,26 @@ class BatchDialog(QDialog):
         lay.addLayout(row)
 
     def _inputs(self, enabled: bool) -> None:
-        for w in (self.count, self.ttl, self.domain, self.use_pin):
+        quick = self.quick.isChecked()
+        for w in (self.count, self.domain, self.quick):
             w.setEnabled(enabled)
-        self.pin.setEnabled(enabled and self.use_pin.isChecked())
+        for w in (self.ttl, self.use_pin):
+            w.setEnabled(enabled and not quick)
+        self.pin.setEnabled(enabled and not quick and self.use_pin.isChecked())
 
     def _start(self) -> None:
-        pin = self.pin.text() if self.use_pin.isChecked() else ""
-        if self.use_pin.isChecked() and not pin:
+        quick = self.quick.isChecked()
+        self.settings.quick_create = quick
+        pin = self.pin.text() if self.use_pin.isChecked() and not quick else ""
+        if self.use_pin.isChecked() and not quick and not pin:
             QMessageBox.warning(self, "Thiếu PIN", "Hãy nhập PIN hoặc tắt tuỳ chọn Đặt PIN.")
             return
         creator = BatchCreator(self.client, self.storage, self.secrets,
                                count=self.count.value(), ttl_minutes=self.ttl.currentData(),
                                pin=pin, domain=self.domain.currentData() or None,
-                               delay=self.settings.delay)
-        if self.bridge is not None:
+                               delay=0.3 if quick else self.settings.delay,
+                               save_settings=not quick)
+        if self.bridge is not None and not quick:
             creator.solve_captcha = lambda: self.bridge.solve_captcha(lambda: creator.stopped)
         self.progress.setRange(0, self.count.value())
         self.progress.setValue(0)

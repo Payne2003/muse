@@ -157,7 +157,7 @@ class CodesDialog(QDialog):
 class CodeNotifier(QObject):
     """Quét định kỳ tất cả hộp thư và hiện thông báo khi có thư xác nhận mới."""
 
-    new_codes = Signal(list)
+    new_codes = Signal(object)  # ScanResult
 
     def __init__(self, window, client, storage, secrets):
         super().__init__(window)
@@ -229,11 +229,11 @@ class CodeNotifier(QObject):
         self._running = True
         self._stop.clear()
 
-        def done(events):
+        def done(result):
             self._running = False
-            if events:
-                self._notify(events)
-                self.new_codes.emit(events)
+            if result:
+                self._notify(result.codes, result.registrations)
+                self.new_codes.emit(result)
             self._schedule()
 
         def failed(_exc):
@@ -247,8 +247,22 @@ class CodeNotifier(QObject):
             self.timer.start(self.interval_s * 1000)
 
     # --------------------------------------------------------------- notify
-    def _notify(self, events: list[CodeEvent]) -> None:
+    def _notify(self, events: list[CodeEvent], regs: list | None = None) -> None:
+        regs = regs or []
         self._last = events
+        self._last_regs = regs
+        if not events:  # chỉ có thư chào mừng / đăng nhập (không có mã)
+            if len(regs) == 1:
+                r = regs[0]
+                title = f"Đã đăng ký {r.service}"
+                body = (account_line(r.account, r.via_secret, r.mailbox) +
+                        "\nĐã chuyển sang mục Đã đăng ký.")
+            else:
+                title = f"{len(regs)} hộp thư vừa được đăng ký"
+                body = "\n".join(f"{r.service} → {r.mailbox}" for r in regs[:4])
+                body += "\nĐã chuyển sang mục Đã đăng ký."
+            self._show(title, body)
+            return
         first = events[0]
         if self.auto_copy and first.code:
             QGuiApplication.clipboard().setText(first.code)
@@ -259,6 +273,8 @@ class CodeNotifier(QObject):
             body = account_line(e.account, e.via_secret, e.mailbox)
             if not e.code:
                 body += f"\n{e.subject}"
+            if e.newly_registered:
+                body += f"\n→ Đã chuyển sang Đã đăng ký ({e.service})"
             body += "\n" + ("Đã sao chép mã." if self.auto_copy and e.code
                             else "Bấm để sao chép mã")
         else:
@@ -267,12 +283,26 @@ class CodeNotifier(QObject):
             if len(events) > 4:
                 lines.append(f"… và {len(events) - 4} thư khác")
             body = "\n".join(lines) + "\nBấm để xem danh sách."
+        moved = sum(1 for e in events if e.newly_registered) + len(regs)
+        if moved and len(events) > 1:
+            body += f"\n{moved} hộp chuyển sang Đã đăng ký."
+        elif regs:
+            body += "\nCũng vừa đăng ký: " + ", ".join(
+                f"{r.service} → {r.mailbox}" for r in regs[:3])
+        self._show(title, body)
+
+    def _show(self, title: str, body: str) -> None:
         if self.tray.isVisible():
             self.tray.showMessage(title, body, QSystemTrayIcon.Information, 20000)
         else:  # không có khay hệ thống: dùng thanh trạng thái
             self.window.statusBar().showMessage(title + " — " + body.replace("\n", " · "), 20000)
 
     def _on_message_clicked(self) -> None:
+        regs = getattr(self, "_last_regs", [])
+        if not self._last and regs:
+            self.window.show_from_tray()
+            self.window.open_mailbox(regs[0].mailbox)
+            return
         if len(self._last) == 1:
             e = self._last[0]
             if e.code:

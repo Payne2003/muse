@@ -218,3 +218,17 @@ def test_web_url_opens_exact_mailbox():
     assert web_url("Ku29TClac9@merepost.com") == "https://tempmail.plus/en/?ku29tclac9@merepost.com"
     assert web_url() == "https://tempmail.plus/"
     assert web_url("not-an-address") == "https://tempmail.plus/"
+
+
+def test_quick_batch_needs_no_captcha(tmp_path):
+    server = CaptchaServer()  # mọi lần lưu cài đặt đều đòi captcha
+    storage = Storage(tmp_path / "q.db")
+    asked = []
+    res = BatchCreator(TempMailClient(session=server), storage, SecretStore(backend="memory"),
+                       count=5, ttl_minutes=10080, delay=0, save_settings=False,
+                       solve_captcha=lambda: asked.append(1)).run()
+    assert (res.status, res.created) == (STATUS_DONE, 5) and not asked
+    boxes = storage.list_mailboxes()
+    assert len(boxes) == 5 and not any(b.applied for b in boxes)
+    assert server.posts == 0
+    storage.close()

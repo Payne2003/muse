@@ -69,19 +69,19 @@ def test_watcher_notifies_new_codes_with_account(tmp_path):
     srv.mails["ku29@merepost.com"] = [
         {"id": 1, "from": "a@x.com", "subject": "Old code 111111", "to": "ku29@merepost.com", "html": ""}]
     w = MailWatcher(TempMailClient(session=srv), st, sec, pause=0)
-    assert w.scan_once() == []  # lần đầu: chỉ ghi nhận thư cũ
+    assert not w.scan_once()  # lần đầu: chỉ ghi nhận thư cũ
     srv.mails["ku29@merepost.com"].append(
         {"id": 2, "from": "security@account.meta.com", "subject": "Xác nhận email cho Tài khoản Meta mới",
          "to": "vkhidden@merepost.com", "html": "<p>Mã xác nhận</p><p>089574</p>"})
     srv.mails["ku29@merepost.com"].append(
         {"id": 3, "from": "news@shop.com", "subject": "Khuyến mãi", "to": "ku29@merepost.com",
          "html": "giảm giá"})
-    ev = w.scan_once()
+    ev = w.scan_once().codes
     assert len(ev) == 1
     e = ev[0]
     assert (e.code, e.account, e.via_secret, e.mailbox) == \
         ("089574", "vkhidden@merepost.com", True, "ku29@merepost.com")
-    assert w.scan_once() == []  # không báo lại
+    assert not w.scan_once()  # không báo lại
     assert st.recent_codes()[0]["code"] == "089574"
     st.close()
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.0
+- **Tách hộp thư đã đăng ký**: danh sách bên trái có 2 thẻ **Chưa dùng** và **Đã đăng ký**.
+  Hộp nào nhận thư xác nhận / mã, thư chào mừng hoặc thư đăng nhập từ một dịch vụ sẽ tự chuyển
+  sang **Đã đăng ký**, kèm nhãn dịch vụ (Meta, Facebook, Google, Shopee…) và ngày.
+  Một hộp dùng cho nhiều dịch vụ sẽ có nhiều nhãn.
+- Lần đầu chạy, các thư **đã có sẵn** cũng được nhận diện (không báo dồn).
+- Lọc theo dịch vụ; chuột phải một hộp → **Đánh dấu đã đăng ký…** / **Chuyển về Chưa dùng**.
+- **Xuất danh sách**: lưu file .txt hoặc sao chép theo dạng
+  `1  Available  -  email | https://tempmail.plus/  Xóa`, hoặc CSV chi tiết.
+- **Tạo nhanh – không cần captcha**: tạo địa chỉ ngay, bỏ qua lưu thời hạn/PIN.
+- Thông báo cho biết khi một hộp vừa chuyển sang Đã đăng ký.
+
 ## 1.3.2
 - Nút **Mở trên web** mở thẳng đúng hộp thư đang chọn trên tempmail.plus
   (link dạng `https://tempmail.plus/en/?ten@tenmien`), không cần gõ lại tên và chọn tên miền.

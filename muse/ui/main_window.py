@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QFrame, QSystemTrayIcon, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QComboBox, QFileDialog, QInputDialog, QMenu, QTabBar,
     QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QSizePolicy, QSplitter,
     QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
 )
@@ -14,6 +15,8 @@ from PySide6.QtWidgets import (
 from muse import APP_NAME, __version__
 from muse.core.api import LIFETIMES, CaptchaRequired, TempMailClient, TempMailError, WrongPin, web_url
 from muse.core.secrets import SecretStore
+from muse.core.export import format_list
+from muse.core.services import KIND_LABEL
 from muse.core.storage import Mailbox, Storage, now_iso
 
 from .dialogs import (AddExistingDialog, AppSettings, ApplySettingsDialog, BatchDialog,
@@ -55,7 +58,7 @@ def badge(text: str, kind: str) -> QLabel:
 class MailboxRow(QWidget):
     """Một dòng trong danh sách bên trái: địa chỉ + nút Sao chép."""
 
-    def __init__(self, mb: Mailbox, on_copy):
+    def __init__(self, mb: Mailbox, on_copy, regs: list | None = None):
         super().__init__()
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 6, 6, 6)
@@ -63,12 +66,20 @@ class MailboxRow(QWidget):
         col.setSpacing(1)
         addr = QLabel(mb.address)
         addr.setStyleSheet("font-weight:600; color:#12355b;")
-        ttl = LIFETIMES.get(mb.ttl_minutes or 0, "chưa rõ thời hạn")
-        state = "Đã áp dụng" if mb.applied else "Chưa áp dụng"
-        pin = " · PIN" if mb.has_pin else ""
-        sub = QLabel(f"{ttl} · {state}{pin}")
-        sub.setObjectName("muted")
-        sub.setStyleSheet("font-size:8.5pt;")
+        if regs:
+            names = " · ".join(r["service"] for r in regs)
+            sub = QLabel(f"✓ {names} · {fmt_dt(regs[0]['created_at'])[:10]}")
+            sub.setStyleSheet("font-size:8.5pt; color:#1b7a3d; font-weight:600;")
+        elif mb.source == "quick" and not mb.applied:
+            sub = QLabel("Tạo nhanh · thời hạn mặc định của trang")
+        else:
+            ttl = LIFETIMES.get(mb.ttl_minutes or 0, "chưa rõ thời hạn")
+            state = "Đã áp dụng" if mb.applied else "Chưa áp dụng"
+            pin = " · PIN" if mb.has_pin else ""
+            sub = QLabel(f"{ttl} · {state}{pin}")
+        if not regs:
+            sub.setObjectName("muted")
+            sub.setStyleSheet("font-size:8.5pt;")
         col.addWidget(addr)
         col.addWidget(sub)
         lay.addLayout(col, 1)
@@ -152,16 +163,45 @@ class MainWindow(QMainWindow):
         title = QLabel("Hộp thư trên máy")
         title.setObjectName("h2")
         sl.addWidget(title)
+        self.tabs = QTabBar()
+        self.tabs.addTab("Chưa dùng")
+        self.tabs.addTab("Đã đăng ký")
+        self.tabs.setExpanding(True)
+        self.tabs.setDrawBase(False)
+        self.tabs.currentChanged.connect(self._on_tab)
+        sl.addWidget(self.tabs)
+        reg_row = QHBoxLayout()
+        self.service_filter = QComboBox()
+        self.service_filter.currentIndexChanged.connect(lambda _: self.reload_list())
+        reg_row.addWidget(self.service_filter, 1)
+        self.reg_bar = QWidget()
+        self.reg_bar.setLayout(reg_row)
+        reg_row.setContentsMargins(0, 0, 0, 0)
+        self.reg_bar.setVisible(False)
+        sl.addWidget(self.reg_bar)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Tìm địa chỉ…")
         self.search.textChanged.connect(lambda: self.reload_list())
         sl.addWidget(self.search)
         self.list = QListWidget()
         self.list.currentItemChanged.connect(self._on_select)
+        self.list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._list_menu)
         sl.addWidget(self.list, 1)
         self.count_label = QLabel()
         self.count_label.setObjectName("muted")
-        sl.addWidget(self.count_label)
+        foot = QHBoxLayout()
+        foot.addWidget(self.count_label, 1)
+        self.export_btn = QPushButton("Xuất danh sách ▾")
+        self.export_btn.setToolTip("Xuất các hộp thư đang hiện trong danh sách (theo thẻ và bộ lọc)")
+        exp_menu = QMenu(self.export_btn)
+        exp_menu.addAction("Lưu file .txt (STT · Available · email | link · Xóa)", self.export_txt)
+        exp_menu.addAction("Sao chép danh sách vào clipboard", self.copy_list)
+        exp_menu.addSeparator()
+        exp_menu.addAction("Lưu CSV chi tiết (dịch vụ, ngày, địa chỉ bí mật)", self.export_registered)
+        self.export_btn.setMenu(exp_menu)
+        foot.addWidget(self.export_btn)
+        sl.addLayout(foot)
         split.addWidget(side)
 
         # ---- phải: chi tiết + thư
@@ -229,6 +269,16 @@ class MainWindow(QMainWindow):
         sec_row.addWidget(self.secret_copy)
         sec_row.addStretch(1)
         grid.addLayout(sec_row, 2, 1, 1, 3)
+        grid.addWidget(label("Đăng ký"), 3, 0)
+        self.reg_value = QLabel("—")
+        self.reg_value.setWordWrap(True)
+        self.reg_btn = QPushButton("Đánh dấu đã đăng ký…")
+        self.reg_btn.setObjectName("small")
+        self.reg_btn.clicked.connect(self._toggle_registered)
+        reg_row2 = QHBoxLayout()
+        reg_row2.addWidget(self.reg_value, 1)
+        reg_row2.addWidget(self.reg_btn)
+        grid.addLayout(reg_row2, 3, 1, 1, 3)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(3, 1)
         cl.addLayout(grid)
@@ -284,20 +334,35 @@ class MainWindow(QMainWindow):
         keep = self.current.id if self.current else None
         self.list.blockSignals(True)
         self.list.clear()
-        boxes = self.storage.list_mailboxes(self.search.text().strip())
+        regmap = self.storage.registered_map()
+        registered_tab = self.tabs.currentIndex() == 1
+        self._refresh_service_filter()
+        service = self.service_filter.currentData() if registered_tab else None
+        boxes = []
+        for mb in self.storage.list_mailboxes(self.search.text().strip()):
+            regs = regmap.get(mb.address)
+            if registered_tab != bool(regs):
+                continue
+            if service and not any(r["service"].lower() == service.lower() for r in regs):
+                continue
+            boxes.append(mb)
+        all_boxes = self.storage.list_mailboxes()
+        n_reg = sum(1 for b in all_boxes if b.address in regmap)
+        self.tabs.setTabText(0, f"Chưa dùng ({len(all_boxes) - n_reg})")
+        self.tabs.setTabText(1, f"Đã đăng ký ({n_reg})")
         select_row = -1
         for i, mb in enumerate(boxes):
             item = QListWidgetItem()
             item.setData(Qt.UserRole, mb.id)
-            row = MailboxRow(mb, self.copy)
+            row = MailboxRow(mb, self.copy, regmap.get(mb.address))
             item.setSizeHint(row.sizeHint())
             self.list.addItem(item)
             self.list.setItemWidget(item, row)
             if mb.id == keep:
                 select_row = i
         self.list.blockSignals(False)
-        total = len(self.storage.list_mailboxes())
-        self.count_label.setText(f"{total} hộp thư")
+        self.count_label.setText(f"Đang hiện {len(boxes)} / tổng {len(all_boxes)} hộp thư")
+        self._shown = [mb.address for mb in boxes]
         if select_row >= 0:
             self.list.setCurrentRow(select_row)
             self.current = self.storage.get_mailbox(keep)
@@ -324,7 +389,8 @@ class MainWindow(QMainWindow):
         mb = self.current
         enabled = mb is not None
         for w in (self.copy_btn, self.refresh_btn, self.verify_btn, self.apply_btn,
-                  self.del_btn, self.pin_toggle, self.secret_toggle, self.secret_copy):
+                  self.del_btn, self.pin_toggle, self.secret_toggle, self.secret_copy,
+                  self.reg_btn):
             w.setEnabled(enabled)
         while self.state_box.count():
             w = self.state_box.takeAt(0).widget()
@@ -351,6 +417,23 @@ class MainWindow(QMainWindow):
         self.secret_toggle.setVisible(bool(secret))
         self.secret_copy.setVisible(bool(secret))
         self.secret_toggle.setText("Ẩn" if self._show_secret else "Hiện")
+        regs = self.storage.registrations(mb.address)
+        if regs:
+            parts = []
+            for r in regs:
+                via = ""
+                if r["account"] and r["account"] != mb.address:
+                    via = f", qua {mask(r['account'])}" if r["via_secret"] else f", qua {r['account']}"
+                parts.append(f"<b>{html_mod.escape(r['service'])}</b> "
+                             f"({fmt_dt(r['created_at'])}{html_mod.escape(via)}, "
+                             f"{KIND_LABEL.get(r['kind'], r['kind'])})")
+            self.reg_value.setText("Đã đăng ký: " + "; ".join(parts))
+            self.reg_value.setStyleSheet("color:#1b7a3d;")
+            self.reg_btn.setText("Chuyển về Chưa dùng")
+        else:
+            self.reg_value.setText("Chưa dùng để đăng ký")
+            self.reg_value.setStyleSheet("")
+            self.reg_btn.setText("Đánh dấu đã đăng ký…")
 
     def _toggle_pin(self) -> None:
         self._show_pin = not self._show_pin
@@ -424,16 +507,22 @@ class MainWindow(QMainWindow):
 
     def open_mailbox(self, address: str) -> None:
         self.search.clear()
+        want = 1 if self.storage.registrations(address) else 0
+        if self.tabs.currentIndex() != want:
+            self.tabs.setCurrentIndex(want)
         for i in range(self.list.count()):
             mb = self.storage.get_mailbox(self.list.item(i).data(Qt.UserRole))
             if mb and mb.address == address.lower():
                 self.list.setCurrentRow(i)
                 return
 
-    def _on_new_codes(self, events) -> None:
+    def _on_new_codes(self, result) -> None:
         if self._codes_dlg is not None:
             self._codes_dlg.reload()
-        if self.current and any(e.mailbox == self.current.address for e in events):
+        touched = {e.mailbox for e in result.codes} | {r.mailbox for r in result.registrations}
+        if result.registrations or any(e.newly_registered for e in result.codes):
+            self.reload_list()  # hộp vừa đăng ký chuyển sang mục Đã đăng ký
+        if self.current and self.current.address in touched:
             self.refresh_mails(silent=True)
 
     def quit_app(self) -> None:
@@ -456,6 +545,110 @@ class MainWindow(QMainWindow):
         self.notifier.shutdown()
         ev.accept()
         QApplication.instance().quit()
+
+    # ================================================================ registrations
+    def _on_tab(self, index: int) -> None:
+        self.reg_bar.setVisible(index == 1)
+        self.reload_list()
+
+    def _refresh_service_filter(self) -> None:
+        cur = self.service_filter.currentData()
+        services = self.storage.services()
+        self.service_filter.blockSignals(True)
+        self.service_filter.clear()
+        self.service_filter.addItem("Tất cả dịch vụ", None)
+        for name in services:
+            self.service_filter.addItem(name, name)
+        idx = self.service_filter.findData(cur)
+        self.service_filter.setCurrentIndex(max(idx, 0))
+        self.service_filter.blockSignals(False)
+
+    def _list_menu(self, pos) -> None:
+        item = self.list.itemAt(pos)
+        if item is None:
+            return
+        mb = self.storage.get_mailbox(item.data(Qt.UserRole))
+        if not mb:
+            return
+        menu = QMenu(self)
+        menu.addAction("Sao chép địa chỉ", lambda: self.copy(mb.address))
+        menu.addAction("Mở trên web", lambda: QDesktopServices.openUrl(QUrl(web_url(mb.address))))
+        menu.addSeparator()
+        menu.addAction("Đánh dấu đã đăng ký…", lambda: self.mark_registered(mb.address))
+        if self.storage.registrations(mb.address):
+            menu.addAction("Chuyển về Chưa dùng", lambda: self.unmark_registered(mb.address))
+        menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def mark_registered(self, address: str) -> None:
+        name, ok = QInputDialog.getItem(
+            self, "Đánh dấu đã đăng ký", f"{address} đã dùng để đăng ký dịch vụ nào?",
+            self.storage.services() or ["Meta", "Facebook", "Google", "TikTok"], 0, True)
+        name = (name or "").strip()
+        if not ok or not name:
+            return
+        self.storage.add_registration(mailbox=address, service=name, kind="manual",
+                                      source="manual")
+        self.statusBar().showMessage(f"Đã chuyển {address} sang Đã đăng ký ({name})", 5000)
+        self.open_mailbox(address)
+        self.reload_list()
+
+    def unmark_registered(self, address: str) -> None:
+        if QMessageBox.question(
+                self, "Chuyển về Chưa dùng",
+                f"Xoá đánh dấu đã đăng ký của {address} và chuyển về Chưa dùng?") != QMessageBox.Yes:
+            return
+        self.storage.clear_registrations(address)
+        self.statusBar().showMessage(f"Đã chuyển {address} về Chưa dùng", 5000)
+        self.open_mailbox(address)
+        self.reload_list()
+
+    def _toggle_registered(self) -> None:
+        if not self.current:
+            return
+        if self.storage.registrations(self.current.address):
+            self.unmark_registered(self.current.address)
+        else:
+            self.mark_registered(self.current.address)
+
+    def _shown_addresses(self) -> list[str]:
+        return list(getattr(self, "_shown", []))
+
+    def export_txt(self) -> None:
+        addrs = self._shown_addresses()
+        if not addrs:
+            QMessageBox.information(self, "Xuất danh sách", "Danh sách đang trống.")
+            return
+        name = "da-dang-ky.txt" if self.tabs.currentIndex() == 1 else "chua-dung.txt"
+        path, _ = QFileDialog.getSaveFileName(self, "Lưu danh sách", name, "Văn bản (*.txt)")
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(format_list(addrs))
+        self.statusBar().showMessage(f"Đã xuất {len(addrs)} hộp thư ra {path}", 8000)
+
+    def copy_list(self) -> None:
+        addrs = self._shown_addresses()
+        QGuiApplication.clipboard().setText(format_list(addrs))
+        self.statusBar().showMessage(f"Đã sao chép {len(addrs)} dòng vào clipboard", 5000)
+
+    def export_registered(self) -> None:
+        import csv
+        path, _ = QFileDialog.getSaveFileName(self, "Xuất danh sách đã đăng ký",
+                                              "da-dang-ky.csv", "CSV (*.csv)")
+        if not path:
+            return
+        shown = set(self._shown_addresses())
+        regs = [r for r in self.storage.registrations() if r["mailbox"] in shown] \
+            if self.tabs.currentIndex() == 1 else self.storage.registrations()
+        with open(path, "w", newline="", encoding="utf-8-sig") as fh:
+            w = csv.writer(fh)
+            w.writerow(["Hộp thư", "Địa chỉ bí mật", "Dịch vụ", "Đăng ký qua", "Nhận biết từ",
+                        "Ngày", "Tiêu đề thư"])
+            for r in regs:
+                w.writerow([r["mailbox"], self.secrets.secret(r["mailbox"]), r["service"],
+                            r["account"], KIND_LABEL.get(r["kind"], r["kind"]),
+                            r["created_at"], r["subject"]])
+        self.statusBar().showMessage(f"Đã xuất {len(regs)} dòng ra {path}", 8000)
 
     def remove_current(self) -> None:
         mb = self.current

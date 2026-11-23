@@ -58,6 +58,19 @@ CREATE TABLE IF NOT EXISTS codes (
     mail_id     INTEGER NOT NULL,
     received_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS registrations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    mailbox     TEXT NOT NULL COLLATE NOCASE,
+    service     TEXT NOT NULL COLLATE NOCASE,
+    account     TEXT NOT NULL DEFAULT '',
+    via_secret  INTEGER NOT NULL DEFAULT 0,
+    kind        TEXT NOT NULL DEFAULT 'verify',
+    source      TEXT NOT NULL DEFAULT 'auto',
+    mail_id     INTEGER,
+    subject     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    UNIQUE (mailbox, service)
+);
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -293,6 +306,47 @@ class Storage:
         with self._lock:
             self._db.execute("DELETE FROM seen_mails WHERE address = ?", (address,))
             self._db.execute("DELETE FROM scanned_boxes WHERE address = ?", (address,))
+            self._db.execute("DELETE FROM registrations WHERE mailbox = ?", (address.lower(),))
+            self._db.commit()
+
+    # ------------------------------------------------------------------ registrations
+    def add_registration(self, *, mailbox: str, service: str, account: str = "",
+                         via_secret: bool = False, kind: str = "verify", source: str = "auto",
+                         mail_id: int | None = None, subject: str = "") -> bool:
+        """Ghi nhận hộp thư đã đăng ký một dịch vụ. Trả về True nếu là đăng ký mới."""
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT OR IGNORE INTO registrations(mailbox, service, account, via_secret, kind, "
+                "source, mail_id, subject, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (mailbox.lower(), service, account.lower() or mailbox.lower(), int(via_secret),
+                 kind, source, mail_id, subject, now_iso()))
+            self._db.commit()
+            return cur.rowcount > 0
+
+    def registrations(self, mailbox: str | None = None) -> list[dict]:
+        with self._lock:
+            if mailbox:
+                rows = self._db.execute("SELECT * FROM registrations WHERE mailbox = ? ORDER BY id",
+                                        (mailbox.lower(),)).fetchall()
+            else:
+                rows = self._db.execute("SELECT * FROM registrations ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    def registered_map(self) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        for r in self.registrations():
+            out.setdefault(r["mailbox"], []).append(r)
+        return out
+
+    def services(self) -> list[str]:
+        with self._lock:
+            rows = self._db.execute("SELECT DISTINCT service FROM registrations "
+                                    "ORDER BY service COLLATE NOCASE").fetchall()
+        return [r[0] for r in rows]
+
+    def clear_registrations(self, mailbox: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM registrations WHERE mailbox = ?", (mailbox.lower(),))
             self._db.commit()
 
     # ------------------------------------------------------------------ settings

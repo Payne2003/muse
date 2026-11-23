@@ -43,7 +43,8 @@ class BatchCreator:
     def __init__(self, client: TempMailClient, storage: Storage, secrets: SecretStore,
                  *, count: int, ttl_minutes: int, pin: str = "", domain: str | None = None,
                  delay: float = 1.0, max_failures: int = 3,
-                 solve_captcha: Callable[[], str | None] | None = None):
+                 solve_captcha: Callable[[], str | None] | None = None,
+                 save_settings: bool = True):
         if count < 1:
             raise ValueError("Số lượng phải lớn hơn 0")
         self.client = client
@@ -57,6 +58,9 @@ class BatchCreator:
         self.max_failures = max_failures
         self.solve_captcha = solve_captcha
         self.captchas_solved = 0
+        # False = "Tạo nhanh": chỉ sinh địa chỉ (mọi địa chỉ trên tên miền TempMail.Plus đều
+        # nhận thư ngay), không lưu thời hạn/PIN nên không cần captcha.
+        self.save_settings = save_settings
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -89,7 +93,21 @@ class BatchCreator:
                 self.captchas_solved += 1
         raise CaptchaRequired("TempMail.Plus vẫn yêu cầu captcha sau khi xác minh")
 
+    def create_quick(self, batch_id: int | None = None) -> Mailbox:
+        address = self._new_address()
+        secret = ""
+        try:
+            secret = self.client.get_secret_address(address) or ""
+        except TempMailError:
+            secret = ""  # kể cả khi trang đòi captcha: bỏ qua, lấy lại sau bằng Kiểm tra cài đặt
+        if secret:
+            self.secrets.set(address, "secret", secret)
+        return self.storage.add_mailbox(address, has_secret=bool(secret), applied=False,
+                                        source="quick", batch_id=batch_id)
+
     def create_one(self, batch_id: int | None = None) -> Mailbox:
+        if not self.save_settings:
+            return self.create_quick(batch_id)
         address = self._new_address()
         self._captcha_retry(lambda tok: self.client.set_box(
             address, self.ttl, pin=self.pin, recaptcha=tok))
