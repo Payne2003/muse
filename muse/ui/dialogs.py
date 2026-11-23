@@ -5,6 +5,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QVBoxLayout,
+    QWidget,
 )
 
 from muse.core.api import DOMAINS, LIFETIMES, TempMailClient, is_valid_address, web_url
@@ -82,6 +83,14 @@ class AppSettings:
         self.storage.set_setting("default_domain", v)
 
     @property
+    def use_browser(self) -> bool:
+        return self.storage.get_setting("use_browser", "1") == "1"
+
+    @use_browser.setter
+    def use_browser(self, v: bool) -> None:
+        self.storage.set_setting("use_browser", "1" if v else "0")
+
+    @property
     def delay(self) -> float:
         try:
             return max(0.0, float(self.storage.get_setting("batch_delay", "1.5")))
@@ -114,6 +123,9 @@ class SettingsDialog(QDialog):
         form.addRow("", self.pin)
         form.addRow("Tên miền mặc định", self.domain)
         form.addRow("Nghỉ giữa 2 lần tạo", self.delay)
+        self.use_browser = QCheckBox("Tạo lô qua trình duyệt tích hợp (hiện captcha để tự tích)")
+        self.use_browser.setChecked(settings.use_browser)
+        form.addRow("Captcha", self.use_browser)
         self.auto_update = QCheckBox("Tự động kiểm tra và cài bản cập nhật")
         self.auto_update.setChecked(auto_update)
         form.addRow("Cập nhật", self.auto_update)
@@ -136,6 +148,7 @@ class SettingsDialog(QDialog):
         self.settings.pin_enabled = self.pin.isChecked()
         self.settings.domain = self.domain.currentData()
         self.settings.delay = float(self.delay.value())
+        self.settings.use_browser = self.use_browser.isChecked()
         self.accept()
 
 
@@ -242,8 +255,36 @@ class BatchDialog(QDialog):
         lay.addWidget(self.status)
         lay.addWidget(self.log)
 
+        # Trình duyệt tích hợp: gửi yêu cầu như trên web và hiện ô captcha khi trang đòi
+        self.bridge = None
+        self.cap_panel = QWidget()
+        cap_lay = QVBoxLayout(self.cap_panel)
+        cap_lay.setContentsMargins(0, 0, 0, 0)
+        cap_head = QHBoxLayout()
+        cap_lbl = QLabel("<b>Cần xác minh captcha.</b> Tích vào ô bên dưới, lô sẽ tự chạy tiếp.")
+        cap_lbl.setWordWrap(True)
+        cap_skip = QPushButton("Bỏ qua (dừng lô)")
+        cap_skip.clicked.connect(self._skip_captcha)
+        cap_head.addWidget(cap_lbl, 1)
+        cap_head.addWidget(cap_skip)
+        cap_lay.addLayout(cap_head)
+        try:
+            from .webclient import WEB_AVAILABLE, WebBridge, WebSession
+            if WEB_AVAILABLE and settings.use_browser:
+                self.bridge = WebBridge(self)
+                cap_lay.addWidget(self.bridge.view, 1)
+                self.bridge.captcha_shown.connect(self._captcha_shown)
+                self.bridge.captcha_hidden.connect(self._captcha_hidden)
+                self.client = TempMailClient(session=WebSession(self.bridge))
+        except Exception as exc:  # noqa: BLE001 – không có trình duyệt: dùng kết nối thường
+            self.bridge = None
+            self.log.appendPlainText(f"Không mở được trình duyệt tích hợp: {exc}")
+        self.cap_panel.setVisible(False)
+        lay.addWidget(self.cap_panel, 1)
+
         row = QHBoxLayout()
-        self.manual_btn = QPushButton("Tạo thủ công trên TempMail.Plus…")
+        self.manual_btn = QPushButton("Tạo thủ công…")
+        self.manual_btn.setToolTip("Mở TempMail.Plus để tự tạo từng hộp rồi ghi nhận vào ứng dụng")
         self.manual_btn.setVisible(False)
         self.manual_btn.clicked.connect(self._manual)
         self.start_btn = QPushButton("Bắt đầu")
@@ -275,6 +316,8 @@ class BatchDialog(QDialog):
                                count=self.count.value(), ttl_minutes=self.ttl.currentData(),
                                pin=pin, domain=self.domain.currentData() or None,
                                delay=self.settings.delay)
+        if self.bridge is not None:
+            creator.solve_captcha = lambda: self.bridge.solve_captcha(lambda: creator.stopped)
         self.progress.setRange(0, self.count.value())
         self.progress.setValue(0)
         self.log.clear()
@@ -309,20 +352,42 @@ class BatchDialog(QDialog):
             STATUS_DONE: f"Hoàn tất: đã tạo {res.created}/{res.requested} hộp thư.",
             STATUS_STOPPED: f"Đã dừng ở {res.created}/{res.requested}. "
                             f"{res.created} hộp đã tạo vẫn có trong danh sách.",
-            STATUS_CAPTCHA: f"Dừng ở {res.created}/{res.requested}: TempMail.Plus yêu cầu "
-                            "xác minh captcha nên không thể tạo tự động tiếp. Bạn có thể tạo "
-                            "phần còn lại thủ công trên trang.",
+            STATUS_CAPTCHA: f"Dừng ở {res.created}/{res.requested}: chưa xác minh captcha. "
+                            "Bấm nút bên dưới để tạo tiếp phần còn lại (sẽ hỏi captcha lại).",
             STATUS_ERROR: f"Dừng ở {res.created}/{res.requested} do lỗi: {res.message}",
         }.get(res.status, res.message)
         self.status.setText(msg)
-        if res.status in (STATUS_CAPTCHA, STATUS_ERROR) and res.created < res.requested:
+        remaining = res.requested - res.created
+        if res.status != STATUS_DONE and remaining > 0:
+            self.count.setValue(remaining)
+            self.start_btn.setText(f"Tạo tiếp {remaining} hộp còn lại")
+        if res.status in (STATUS_CAPTCHA, STATUS_ERROR) and remaining > 0:
             self.manual_btn.setVisible(True)
+
+    def _captcha_shown(self) -> None:
+        self.cap_panel.setVisible(True)
+        self.status.setText("Đang chờ bạn xác minh captcha…")
+        self.resize(max(self.width(), 560), max(self.height(), 900))
+        self.raise_()
+        self.activateWindow()
+
+    def _captcha_hidden(self) -> None:
+        self.cap_panel.setVisible(False)
+        self.adjustSize()
+        if self.thread:
+            self.status.setText("Đã xác minh, đang tạo tiếp…")
+
+    def _skip_captcha(self) -> None:
+        if self.bridge is not None:
+            self.bridge.cancel_captcha()
 
     def _stop(self) -> None:
         if self.thread:
             self.stop_btn.setEnabled(False)
             self.status.setText("Đang dừng… (hộp đang tạo dở sẽ được hoàn tất hoặc bỏ qua)")
             self.thread.stop()
+            if self.bridge is not None:
+                self.bridge.cancel_captcha()
 
     def _manual(self) -> None:
         remaining = (self.result.requested - self.result.created) if self.result else self.count.value()
@@ -336,6 +401,8 @@ class BatchDialog(QDialog):
                 ev.ignore()
                 return
             self.thread.stop()
+            if self.bridge is not None:
+                self.bridge.cancel_captcha()
             self.thread.wait(15000)
         super().closeEvent(ev)
 

@@ -376,6 +376,9 @@ class MainWindow(QMainWindow):
     def create_batch(self) -> None:
         dlg = BatchDialog(self.client, self.storage, self.secrets, self.settings, self)
         dlg.exec()
+        if dlg.bridge is not None:
+            dlg.bridge.dispose()
+        dlg.deleteLater()
         self.reload_list()
 
     def create_manual(self) -> None:

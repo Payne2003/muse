@@ -155,3 +155,59 @@ def test_interrupted_batches(env):
     b = storage.start_batch(5, 60, False)
     storage.mark_interrupted_batches()
     assert storage.get_batch(b.id).status == "stopped"
+
+
+class CaptchaServer(FakeServer):
+    """Mỗi lần lưu cài đặt đều đòi captcha, trừ khi có mã xác minh hợp lệ (dùng 1 lần)."""
+
+    def __init__(self):
+        super().__init__()
+        self.valid_tokens = set()
+
+    def request(self, method, url, params=None, data=None, timeout=None):
+        q = params or data or {}
+        if url.endswith("/api/box") and method == "POST":
+            tok = q.get("recaptcha")
+            if tok not in self.valid_tokens:
+                return FakeResp({"result": False, "with_captcha": True})
+            self.valid_tokens.discard(tok)
+        return super().request(method, url, params, data, timeout)
+
+
+def test_batch_continues_after_user_solves_captcha(tmp_path):
+    server = CaptchaServer()
+    storage = Storage(tmp_path / "s.db")
+    asked = []
+
+    def solver():
+        tok = f"tok{len(asked)}"
+        asked.append(tok)
+        server.valid_tokens.add(tok)
+        return tok
+
+    creator = BatchCreator(TempMailClient(session=server), storage, SecretStore(backend="memory"),
+                           count=4, ttl_minutes=10080, delay=0, solve_captcha=solver)
+    res = creator.run()
+    assert (res.status, res.created) == (STATUS_DONE, 4)
+    assert len(asked) == 4 and creator.captchas_solved == 4
+    assert all(b.applied for b in storage.list_mailboxes())
+    storage.close()
+
+
+def test_batch_stops_when_user_skips_captcha(tmp_path):
+    server = CaptchaServer()
+    storage = Storage(tmp_path / "k.db")
+    calls = {"n": 0}
+
+    def solver():
+        calls["n"] += 1
+        if calls["n"] > 2:
+            return None  # người dùng bấm Bỏ qua
+        server.valid_tokens.add("ok%d" % calls["n"])
+        return "ok%d" % calls["n"]
+
+    res = BatchCreator(TempMailClient(session=server), storage, SecretStore(backend="memory"),
+                       count=10, ttl_minutes=60, delay=0, solve_captcha=solver).run()
+    assert res.status == STATUS_CAPTCHA and res.created == 2
+    assert len(storage.list_mailboxes()) == 2
+    storage.close()

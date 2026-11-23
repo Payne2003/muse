@@ -4,7 +4,15 @@ import sys
 
 
 def main(argv: list[str] | None = None) -> int:
+    from PySide6.QtCore import QCoreApplication, Qt
     from PySide6.QtWidgets import QApplication
+
+    # QtWebEngine (trình duyệt tích hợp để xác minh captcha) phải nạp trước QApplication
+    QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+    try:
+        import PySide6.QtWebEngineWidgets  # noqa: F401
+    except Exception:  # noqa: BLE001
+        pass
 
     from muse import APP_NAME
     from muse.core.api import TempMailClient

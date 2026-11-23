@@ -27,10 +27,11 @@ a = Analysis(
     hiddenimports=collect_submodules("keyring.backends") + ["win32ctypes.core"],
     excludes=[
         "tkinter", "pytest",
-        "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick",
-        "PySide6.Qt3DCore", "PySide6.Qt3DRender", "PySide6.QtQuick", "PySide6.QtQml",
+        # QtWebEngine được giữ lại: trình duyệt tích hợp để xác minh captcha
+        "PySide6.QtWebEngineQuick",
+        "PySide6.Qt3DCore", "PySide6.Qt3DRender",
         "PySide6.QtMultimedia", "PySide6.QtCharts", "PySide6.QtDataVisualization",
-        "PySide6.QtPdf", "PySide6.QtBluetooth", "PySide6.QtPositioning", "PySide6.QtSensors",
+        "PySide6.QtBluetooth", "PySide6.QtSensors",
     ],
     noarchive=False,
 )

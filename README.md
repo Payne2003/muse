@@ -46,10 +46,11 @@ mà trang web gọi (lấy từ mã JavaScript công khai của trang):
 
 Một hộp trong lô chỉ được đếm khi `GET /api/box` trả về đúng thời hạn vừa đặt.
 
-**Giới hạn:** trang có thể yêu cầu reCAPTCHA khi lưu cài đặt nhiều lần liên tiếp. Khi đó lô
-dừng lại (các hộp đã tạo vẫn được giữ) và nút **Tạo thủ công trên TempMail.Plus…** xuất hiện:
-ứng dụng mở trang, bạn tạo hộp trên web rồi dán địa chỉ (và địa chỉ bí mật) vào để ghi nhận.
-Đây là API không chính thức nên có thể thay đổi bất cứ lúc nào.
+**Captcha:** trang có thể đòi reCAPTCHA khi lưu cài đặt. Lô được gửi qua trình duyệt tích hợp
+(QtWebEngine) mở đúng trang tempmail.plus; khi trang đòi captcha, ô "Tôi không phải là người máy"
+hiện ngay trong hộp thoại Tạo lô để bạn tự tích, rồi lô chạy tiếp. Ứng dụng không tự giải
+captcha. Nếu bấm **Bỏ qua** hoặc **Dừng**, các hộp đã tạo vẫn được giữ và có nút
+**Tạo tiếp N hộp còn lại**. Đây là API không chính thức nên có thể thay đổi bất cứ lúc nào.
 
 ## Chạy từ mã nguồn
 

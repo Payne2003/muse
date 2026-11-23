@@ -170,16 +170,23 @@ class TempMailClient:
         return j
 
     # ------------------------------------------------------------------ box settings
-    def get_box(self, email: str, epin: str = "") -> BoxSettings:
-        j = self._call("GET", "/api/box", {"email": email, "epin": epin})
+    @staticmethod
+    def _with(data: dict, recaptcha: str | None) -> dict:
+        if recaptcha:
+            data["recaptcha"] = recaptcha  # mã xác minh reCAPTCHA, giống trang web gửi kèm
+        return data
+
+    def get_box(self, email: str, epin: str = "", recaptcha: str | None = None) -> BoxSettings:
+        j = self._call("GET", "/api/box", self._with({"email": email, "epin": epin}, recaptcha))
         ttl = j.get("ttl_minutes")
         return BoxSettings(ttl_minutes=int(ttl) if ttl is not None else None, raw=j)
 
-    def set_box(self, email: str, ttl_minutes: int, pin: str = "", epin: str = "") -> None:
+    def set_box(self, email: str, ttl_minutes: int, pin: str = "", epin: str = "",
+                recaptcha: str | None = None) -> None:
         if ttl_minutes not in LIFETIMES:
             raise ValueError(f"Thời hạn không hợp lệ: {ttl_minutes}")
-        j = self._call("POST", "/api/box",
-                       {"email": email, "ttl_minutes": ttl_minutes, "pin": pin, "epin": epin})
+        j = self._call("POST", "/api/box", self._with(
+            {"email": email, "ttl_minutes": ttl_minutes, "pin": pin, "epin": epin}, recaptcha))
         if not j.get("result"):
             raise TempMailError("TempMail.Plus không lưu cài đặt")
 
@@ -190,8 +197,10 @@ class TempMailClient:
         check = self.get_box(email, epin=pin)
         return check.ttl_minutes == ttl_minutes
 
-    def get_secret_address(self, email: str, epin: str = "") -> str | None:
-        j = self._call("GET", "/api/box/hidden", {"email": email, "epin": epin})
+    def get_secret_address(self, email: str, epin: str = "",
+                           recaptcha: str | None = None) -> str | None:
+        j = self._call("GET", "/api/box/hidden",
+                       self._with({"email": email, "epin": epin}, recaptcha))
         return j.get("email") or None
 
     # ------------------------------------------------------------------ mails
