@@ -51,9 +51,13 @@ def sender_label(sender: str) -> str:
 
 
 def account_line(account: str, via_secret: bool, mailbox: str) -> str:
+    """Tên hộp thư như trên trang tempmail.plus, kèm địa chỉ bí mật nếu thư gửi qua đó."""
+    line = f"Hộp thư: {mailbox}"
     if via_secret:
-        return f"Tài khoản: {account} (địa chỉ bí mật)\nHộp thư: {mailbox}"
-    return f"Tài khoản: {account}"
+        line += f"\n(gửi qua địa chỉ bí mật {account})"
+    elif account != mailbox:
+        line += f"\n(gửi tới {account})"
+    return line
 
 
 class CodesDialog(QDialog):
@@ -66,13 +70,14 @@ class CodesDialog(QDialog):
         self.storage = storage
         self.on_open_mailbox = on_open_mailbox
         lay = QVBoxLayout(self)
-        hint = QLabel("Cột <b>Tài khoản</b> là địa chỉ mà thư được gửi tới (địa chỉ bí mật nếu "
-                      "bạn đăng ký bằng địa chỉ bí mật). Bấm đúp vào một dòng để sao chép mã.")
+        hint = QLabel("<b>Hộp thư</b> là tên hộp thư trên trang tempmail.plus đang chứa thư. "
+                      "<b>Gửi qua</b> là địa chỉ thư được gửi tới (địa chỉ bí mật nếu bạn đăng ký "
+                      "tài khoản bằng địa chỉ bí mật). Bấm đúp vào một dòng để sao chép mã.")
         hint.setWordWrap(True)
         hint.setObjectName("muted")
         lay.addWidget(hint)
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["Thời gian", "Mã", "Tài khoản", "Hộp thư",
+        self.table.setHorizontalHeaderLabels(["Thời gian", "Mã", "Hộp thư", "Gửi qua",
                                               "Người gửi", "Tiêu đề"])
         h = self.table.horizontalHeader()
         for i in range(5):
@@ -90,8 +95,8 @@ class CodesDialog(QDialog):
         copy = QPushButton("Sao chép mã")
         copy.setObjectName("primary")
         copy.clicked.connect(self._copy)
-        acc = QPushButton("Sao chép tài khoản")
-        acc.clicked.connect(lambda: self._copy(col="account"))
+        acc = QPushButton("Sao chép hộp thư")
+        acc.clicked.connect(lambda: self._copy(col="mailbox"))
         open_btn = QPushButton("Mở hộp thư")
         open_btn.clicked.connect(self._open)
         close = QPushButton("Đóng")
@@ -107,8 +112,9 @@ class CodesDialog(QDialog):
         self.rows = self.storage.recent_codes()
         self.table.setRowCount(len(self.rows))
         for r, c in enumerate(self.rows):
-            account = c["account"] + ("  (bí mật)" if c["via_secret"] else "")
-            vals = [c["received_at"], c["code"] or "—", account, c["mailbox"],
+            account = (c["account"] + "  (bí mật)") if c["via_secret"] else (
+                "—" if c["account"] == c["mailbox"] else c["account"])
+            vals = [c["received_at"], c["code"] or "—", c["mailbox"], account,
                     sender_label(c["sender"]), c["subject"]]
             for col, v in enumerate(vals):
                 it = QTableWidgetItem(str(v))
@@ -245,10 +251,10 @@ class CodeNotifier(QObject):
             if not e.code:
                 body += f"\n{e.subject}"
             body += "\n" + ("Đã sao chép mã." if self.auto_copy and e.code
-                            else "Bấm vào đây để sao chép mã.")
+                            else "Bấm để sao chép mã")
         else:
             title = f"{len(events)} thư xác nhận mới"
-            lines = [f"{e.code or '—'} · {sender_label(e.sender)} → {e.account}" for e in events[:4]]
+            lines = [f"{e.code or '—'} · {sender_label(e.sender)} → {e.mailbox}" for e in events[:4]]
             if len(events) > 4:
                 lines.append(f"… và {len(events) - 4} thư khác")
             body = "\n".join(lines) + "\nBấm để xem danh sách."
@@ -266,7 +272,7 @@ class CodeNotifier(QObject):
             self.window.open_mailbox(e.mailbox)
             if e.code:
                 self.window.statusBar().showMessage(
-                    f"Đã sao chép mã {e.code} cho tài khoản {e.account}", 8000)
+                    f"Đã sao chép mã {e.code} của hộp thư {e.mailbox}", 8000)
         else:
             self.window.show_from_tray()
             self.window.show_codes()

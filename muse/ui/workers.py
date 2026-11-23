@@ -23,12 +23,15 @@ class _Task(QRunnable):
 
     def run(self) -> None:
         try:
-            result = self.fn()
-        except Exception as exc:  # noqa: BLE001 – chuyển lỗi về luồng giao diện
-            traceback.print_exc()
-            self.signals.failed.emit(exc)
-        else:
-            self.signals.done.emit(result)
+            try:
+                result = self.fn()
+            except Exception as exc:  # noqa: BLE001 – chuyển lỗi về luồng giao diện
+                traceback.print_exc()
+                self.signals.failed.emit(exc)
+            else:
+                self.signals.done.emit(result)
+        except RuntimeError:
+            pass  # cửa sổ đã đóng trước khi tác vụ nền xong
 
 
 _alive: set[_Task] = set()

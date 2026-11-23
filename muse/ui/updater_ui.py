@@ -33,13 +33,16 @@ class _Task(QRunnable):
 
     def run(self):
         try:
-            result = self.fn(self.signals)
-        except UpdateError as e:
-            self.signals.failed.emit(str(e))
-        except Exception as e:  # noqa: BLE001
-            self.signals.failed.emit(f"{type(e).__name__}: {e}")
-        else:
-            self.signals.done.emit(result)
+            try:
+                result = self.fn(self.signals)
+            except UpdateError as e:
+                self.signals.failed.emit(str(e))
+            except Exception as e:  # noqa: BLE001
+                self.signals.failed.emit(f"{type(e).__name__}: {e}")
+            else:
+                self.signals.done.emit(result)
+        except RuntimeError:
+            pass  # cửa sổ đã đóng trước khi tác vụ nền xong
 
 
 class UpdateDialog(QDialog):

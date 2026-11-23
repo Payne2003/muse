@@ -80,12 +80,12 @@ có thư xác nhận mới (Meta, Google, …), một thông báo Windows hiện
 
 ```
 Mã 089574 · Meta
-Tài khoản: vkq7hd2m@merepost.com (địa chỉ bí mật)
 Hộp thư: ku29tclac9@merepost.com
+(gửi qua địa chỉ bí mật vkq7hd2m@merepost.com)
 ```
 
-**Tài khoản** là địa chỉ mà thư thực sự được gửi tới: nếu bạn đăng ký tài khoản bằng địa chỉ
-bí mật, thông báo ghi đúng địa chỉ bí mật đó (không nhầm sang hộp khác). Bấm vào thông báo để
+**Hộp thư** là đúng tên hộp thư trên trang tempmail.plus đang chứa thư. Nếu bạn đăng ký tài
+khoản bằng địa chỉ bí mật, dòng dưới ghi địa chỉ bí mật mà thư được gửi qua. Bấm vào thông báo để
 sao chép mã và mở đúng hộp thư. Lần đầu quét một hộp, các thư cũ chỉ được ghi nhận, không báo.
 Mọi mã đã nhận nằm trong **Mã xác nhận** trên thanh công cụ.
 

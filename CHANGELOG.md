@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1
+- Thông báo mã xác nhận ghi **tên hộp thư trên trang tempmail.plus** trước tiên
+  (vd `Hộp thư: ku29tclac9@merepost.com`), kèm dòng "gửi qua địa chỉ bí mật …" nếu
+  thư được gửi tới địa chỉ bí mật.
+- Danh sách Mã xác nhận: cột Hộp thư đứng trước, cột "Gửi qua" cho địa chỉ bí mật.
+- Sửa lỗi hiện thông báo lỗi khi đóng ứng dụng lúc tác vụ nền chưa xong.
+
 ## 1.3.0
 - **Báo mã xác nhận tự động**: ứng dụng quét tất cả hộp thư ở nền (mặc định mỗi 60 giây).
   Khi có thư xác nhận mới, hiện thông báo Windows gồm **mã** và **đúng địa chỉ tài khoản**:
