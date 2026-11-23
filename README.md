@@ -73,6 +73,25 @@ Kết quả: `dist\MuseMailbox\MuseMailbox.exe`. Bộ cài đặt (tuỳ chọn)
 GitHub Actions (`.github/workflows/build-windows.yml`) tự chạy test, build `.exe`, tạo bản
 portable `.zip` và bộ cài đặt; đẩy tag `v1.0.0` để tạo Release.
 
+## Báo mã xác nhận
+
+Ứng dụng quét tất cả hộp thư còn hạn ở nền (mặc định mỗi 60 giây, đổi trong **Cài đặt**). Khi
+có thư xác nhận mới (Meta, Google, …), một thông báo Windows hiện ra:
+
+```
+Mã 089574 · Meta
+Tài khoản: vkq7hd2m@merepost.com (địa chỉ bí mật)
+Hộp thư: ku29tclac9@merepost.com
+```
+
+**Tài khoản** là địa chỉ mà thư thực sự được gửi tới: nếu bạn đăng ký tài khoản bằng địa chỉ
+bí mật, thông báo ghi đúng địa chỉ bí mật đó (không nhầm sang hộp khác). Bấm vào thông báo để
+sao chép mã và mở đúng hộp thư. Lần đầu quét một hộp, các thư cũ chỉ được ghi nhận, không báo.
+Mọi mã đã nhận nằm trong **Mã xác nhận** trên thanh công cụ.
+
+Bấm X sẽ thu nhỏ ứng dụng xuống khay hệ thống để vẫn nhận thông báo; chuột phải biểu tượng ở
+khay → **Thoát** để tắt hẳn.
+
 ## Tự cập nhật
 
 Ứng dụng kiểm tra bản mới trên GitHub Releases của repo này khi mở và mỗi 6 giờ (tắt được

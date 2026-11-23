@@ -82,6 +82,44 @@ class AppSettings:
     def domain(self, v: str) -> None:
         self.storage.set_setting("default_domain", v)
 
+    def _flag(self, key: str, default: str) -> bool:
+        return self.storage.get_setting(key, default) == "1"
+
+    @property
+    def notify_enabled(self) -> bool:
+        return self._flag("notify_enabled", "1")
+
+    @notify_enabled.setter
+    def notify_enabled(self, v: bool) -> None:
+        self.storage.set_setting("notify_enabled", "1" if v else "0")
+
+    @property
+    def notify_interval(self) -> int:
+        try:
+            return max(20, int(self.storage.get_setting("notify_interval", "60")))
+        except ValueError:
+            return 60
+
+    @notify_interval.setter
+    def notify_interval(self, v: int) -> None:
+        self.storage.set_setting("notify_interval", str(int(v)))
+
+    @property
+    def notify_auto_copy(self) -> bool:
+        return self._flag("notify_auto_copy", "0")
+
+    @notify_auto_copy.setter
+    def notify_auto_copy(self, v: bool) -> None:
+        self.storage.set_setting("notify_auto_copy", "1" if v else "0")
+
+    @property
+    def tray_on_close(self) -> bool:
+        return self._flag("tray_on_close", "1")
+
+    @tray_on_close.setter
+    def tray_on_close(self, v: bool) -> None:
+        self.storage.set_setting("tray_on_close", "1" if v else "0")
+
     @property
     def use_browser(self) -> bool:
         return self.storage.get_setting("use_browser", "1") == "1"
@@ -126,6 +164,20 @@ class SettingsDialog(QDialog):
         self.use_browser = QCheckBox("Tạo lô qua trình duyệt tích hợp (hiện captcha để tự tích)")
         self.use_browser.setChecked(settings.use_browser)
         form.addRow("Captcha", self.use_browser)
+        self.notify = QCheckBox("Báo khi có thư xác nhận mới (thông báo Windows)")
+        self.notify.setChecked(settings.notify_enabled)
+        self.interval = QSpinBox()
+        self.interval.setRange(20, 3600)
+        self.interval.setSuffix(" giây")
+        self.interval.setValue(settings.notify_interval)
+        self.auto_copy = QCheckBox("Tự sao chép mã vào clipboard khi có thông báo")
+        self.auto_copy.setChecked(settings.notify_auto_copy)
+        self.tray = QCheckBox("Bấm X thì thu nhỏ xuống khay hệ thống (vẫn báo mã)")
+        self.tray.setChecked(settings.tray_on_close)
+        form.addRow("Mã xác nhận", self.notify)
+        form.addRow("Kiểm tra mỗi", self.interval)
+        form.addRow("", self.auto_copy)
+        form.addRow("", self.tray)
         self.auto_update = QCheckBox("Tự động kiểm tra và cài bản cập nhật")
         self.auto_update.setChecked(auto_update)
         form.addRow("Cập nhật", self.auto_update)
@@ -149,6 +201,10 @@ class SettingsDialog(QDialog):
         self.settings.domain = self.domain.currentData()
         self.settings.delay = float(self.delay.value())
         self.settings.use_browser = self.use_browser.isChecked()
+        self.settings.notify_enabled = self.notify.isChecked()
+        self.settings.notify_interval = self.interval.value()
+        self.settings.notify_auto_copy = self.auto_copy.isChecked()
+        self.settings.tray_on_close = self.tray.isChecked()
         self.accept()
 
 

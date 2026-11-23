@@ -96,6 +96,7 @@ class MailDetail:
     text: str
     html: str
     attachments: list = field(default_factory=list)
+    raw: dict = field(default_factory=dict)
 
 
 def random_name(length: int = 10) -> str:
@@ -224,16 +225,28 @@ class TempMailClient:
             mail_id=int(mail_id),
             sender=j.get("from_mail", "") or j.get("from", "") or "",
             sender_name=j.get("from_name", "") or "",
-            to=j.get("to", "") or email,
+            to=_recipient(j),
             subject=j.get("subject", "") or "(không có tiêu đề)",
             date=j.get("date", "") or "",
             text=j.get("text", "") or "",
             html=j.get("html", "") or "",
             attachments=j.get("attachments") or [],
+            raw=j,
         )
 
     def destroy_inbox(self, email: str, first_id: int = 0, epin: str = "") -> None:
         self._call("DELETE", "/api/mails/", {"email": email, "first_id": first_id, "epin": epin})
+
+
+def _recipient(j: dict) -> str:
+    """Địa chỉ thư được gửi tới (tên trường có thể khác nhau giữa các phiên bản API)."""
+    for key in ("to", "to_mail", "mail_to", "recipient", "rcpt_to", "envelope_to"):
+        v = j.get(key)
+        if isinstance(v, list):
+            v = ", ".join(str(x) for x in v)
+        if v:
+            return str(v)
+    return ""
 
 
 def web_url() -> str:

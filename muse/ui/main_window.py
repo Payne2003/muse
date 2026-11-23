@@ -6,7 +6,7 @@ from datetime import datetime
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
-    QAbstractItemView, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QAbstractItemView, QApplication, QFrame, QSystemTrayIcon, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QSizePolicy, QSplitter,
     QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
 )
@@ -18,6 +18,7 @@ from muse.core.storage import Mailbox, Storage, now_iso
 
 from .dialogs import (AddExistingDialog, AppSettings, ApplySettingsDialog, BatchDialog,
                       ManualCreateDialog, SettingsDialog)
+from .notifier import CodeNotifier, CodesDialog, app_icon
 from .updater_ui import UpdateController
 from .workers import run_async
 
@@ -102,6 +103,15 @@ class MainWindow(QMainWindow):
         self.updater = UpdateController(storage, self)
         self.updater.available.connect(self._on_update_available)
         self.updater.start()
+        self._quitting = False
+        self._tray_hint_shown = False
+        self._codes_dlg = None
+        self.setWindowIcon(app_icon())
+        QApplication.instance().setWindowIcon(app_icon())
+        QApplication.instance().setQuitOnLastWindowClosed(False)
+        self.notifier = CodeNotifier(self, self.client, storage, secrets)
+        self.notifier.new_codes.connect(self._on_new_codes)
+        self.notifier.start()
 
     def _on_update_available(self, info) -> None:
         self.update_act.setText(f"⬆ Cập nhật lên v{info.version}")
@@ -114,6 +124,7 @@ class MainWindow(QMainWindow):
         for text, slot in (("Thêm hộp thư đang có", self.add_existing),
                            ("Tạo một lô", self.create_batch),
                            ("Tạo thủ công", self.create_manual),
+                           ("Mã xác nhận", self.show_codes),
                            ("Cài đặt", self.open_settings)):
             act = QAction(text, self)
             act.triggered.connect(slot)
@@ -387,8 +398,62 @@ class MainWindow(QMainWindow):
 
     def open_settings(self) -> None:
         dlg = SettingsDialog(self.settings, self.secrets, self, auto_update=self.updater.auto)
-        if dlg.exec() == SettingsDialog.Accepted and dlg.auto_update.isChecked() != self.updater.auto:
+        if dlg.exec() != SettingsDialog.Accepted:
+            return
+        if dlg.auto_update.isChecked() != self.updater.auto:
             self.updater.auto = dlg.auto_update.isChecked()
+        self.notifier.start()
+
+    # ================================================================ tray & codes
+    def show_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def show_codes(self) -> None:
+        self.show_from_tray()
+        if self._codes_dlg is None:
+            self._codes_dlg = CodesDialog(self.storage, self.open_mailbox, self)
+            self._codes_dlg.finished.connect(lambda *_: setattr(self, "_codes_dlg", None))
+            self._codes_dlg.show()
+        else:
+            self._codes_dlg.reload()
+            self._codes_dlg.raise_()
+
+    def open_mailbox(self, address: str) -> None:
+        self.search.clear()
+        for i in range(self.list.count()):
+            mb = self.storage.get_mailbox(self.list.item(i).data(Qt.UserRole))
+            if mb and mb.address == address.lower():
+                self.list.setCurrentRow(i)
+                return
+
+    def _on_new_codes(self, events) -> None:
+        if self._codes_dlg is not None:
+            self._codes_dlg.reload()
+        if self.current and any(e.mailbox == self.current.address for e in events):
+            self.refresh_mails(silent=True)
+
+    def quit_app(self) -> None:
+        self._quitting = True
+        self.notifier.shutdown()
+        QApplication.instance().quit()
+
+    def closeEvent(self, ev) -> None:  # noqa: N802
+        tray = self.notifier.tray
+        if (not self._quitting and self.settings.tray_on_close and tray.isVisible()):
+            ev.ignore()
+            self.hide()
+            if not self._tray_hint_shown:
+                self._tray_hint_shown = True
+                tray.showMessage(APP_NAME, "Ứng dụng vẫn chạy ở khay hệ thống và sẽ báo khi có "
+                                 "mã xác nhận mới. Chuột phải biểu tượng → Thoát để tắt hẳn.",
+                                 QSystemTrayIcon.Information, 8000)
+            return
+        self._quitting = True
+        self.notifier.shutdown()
+        ev.accept()
+        QApplication.instance().quit()
 
     def remove_current(self) -> None:
         mb = self.current
@@ -401,6 +466,7 @@ class MainWindow(QMainWindow):
         ) != QMessageBox.Yes:
             return
         self.secrets.forget(mb.address)
+        self.storage.forget_mailbox_mails(mb.address)
         self.storage.delete_mailbox(mb.id)
         self.current = None
         self.mails.setRowCount(0)
@@ -534,7 +600,7 @@ class MainWindow(QMainWindow):
             if d.sender_name:
                 sender = f"{html_mod.escape(d.sender_name)} &lt;{sender}&gt;"
             head = (f"<p style='color:#51637a'><b>Từ:</b> {sender}"
-                    f"<br><b>Đến:</b> {html_mod.escape(d.to)}"
+                    f"<br><b>Đến:</b> {html_mod.escape(d.to or address)}"
                     f"<br><b>Thời gian:</b> {html_mod.escape(d.date)}</p>"
                     f"<h3>{html_mod.escape(d.subject)}</h3><hr>")
             body = d.html or "<pre style='white-space:pre-wrap'>" + html_mod.escape(d.text) + "</pre>"

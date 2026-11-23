@@ -39,6 +39,25 @@ CREATE TABLE IF NOT EXISTS batches (
     created_at  TEXT NOT NULL,
     finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS seen_mails (
+    address TEXT NOT NULL COLLATE NOCASE,
+    mail_id INTEGER NOT NULL,
+    PRIMARY KEY (address, mail_id)
+);
+CREATE TABLE IF NOT EXISTS scanned_boxes (
+    address TEXT PRIMARY KEY COLLATE NOCASE
+);
+CREATE TABLE IF NOT EXISTS codes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    mailbox     TEXT NOT NULL,
+    account     TEXT NOT NULL,
+    via_secret  INTEGER NOT NULL DEFAULT 0,
+    sender      TEXT NOT NULL DEFAULT '',
+    subject     TEXT NOT NULL DEFAULT '',
+    code        TEXT,
+    mail_id     INTEGER NOT NULL,
+    received_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -233,6 +252,47 @@ class Storage:
             self._db.execute(
                 "UPDATE batches SET status = 'stopped', message = 'Ứng dụng bị đóng giữa chừng', "
                 "finished_at = ? WHERE status = 'running'", (now_iso(),))
+            self._db.commit()
+
+    # ------------------------------------------------------------------ mail watcher
+    def is_scanned(self, address: str) -> bool:
+        with self._lock:
+            return self._db.execute("SELECT 1 FROM scanned_boxes WHERE address = ?",
+                                    (address,)).fetchone() is not None
+
+    def mark_scanned(self, address: str, mail_ids) -> None:
+        with self._lock:
+            self._db.execute("INSERT OR IGNORE INTO scanned_boxes(address) VALUES (?)", (address,))
+            self._db.executemany("INSERT OR IGNORE INTO seen_mails(address, mail_id) VALUES (?, ?)",
+                                 [(address, int(i)) for i in mail_ids])
+            self._db.commit()
+
+    def seen_ids(self, address: str) -> set[int]:
+        with self._lock:
+            rows = self._db.execute("SELECT mail_id FROM seen_mails WHERE address = ?",
+                                    (address,)).fetchall()
+        return {r[0] for r in rows}
+
+    def add_code(self, *, mailbox: str, account: str, via_secret: bool, sender: str,
+                 subject: str, code: str | None, mail_id: int) -> int:
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO codes(mailbox, account, via_secret, sender, subject, code, mail_id, "
+                "received_at) VALUES (?,?,?,?,?,?,?,?)",
+                (mailbox, account, int(via_secret), sender, subject, code, mail_id, now_iso()))
+            self._db.commit()
+            return cur.lastrowid
+
+    def recent_codes(self, limit: int = 200) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM codes ORDER BY id DESC LIMIT ?",
+                                    (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def forget_mailbox_mails(self, address: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM seen_mails WHERE address = ?", (address,))
+            self._db.execute("DELETE FROM scanned_boxes WHERE address = ?", (address,))
             self._db.commit()
 
     # ------------------------------------------------------------------ settings

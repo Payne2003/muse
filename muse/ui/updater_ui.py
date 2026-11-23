@@ -225,4 +225,5 @@ class UpdateController(QObject):
                  | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
         subprocess.Popen([str(setup), "/SP-", "/SILENT", "/NOCANCEL", "/CLOSEAPPLICATIONS"],
                          creationflags=flags, close_fds=True)
-        QApplication.quit()
+        quit_app = getattr(self.parent_widget, "quit_app", None)
+        quit_app() if quit_app else QApplication.quit()

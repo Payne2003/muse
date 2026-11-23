@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0
+- **Báo mã xác nhận tự động**: ứng dụng quét tất cả hộp thư ở nền (mặc định mỗi 60 giây).
+  Khi có thư xác nhận mới, hiện thông báo Windows gồm **mã** và **đúng địa chỉ tài khoản**:
+  nếu thư được gửi tới địa chỉ bí mật, thông báo ghi địa chỉ bí mật đó kèm hộp thư chính.
+- Bấm vào thông báo để sao chép mã và mở đúng hộp thư.
+- Nút **Mã xác nhận** trên thanh công cụ: danh sách mã gần đây (thời gian, mã, tài khoản,
+  hộp thư, người gửi), sao chép mã hoặc tài khoản.
+- Biểu tượng ở khay hệ thống; bấm X thì thu nhỏ xuống khay để vẫn nhận thông báo
+  (chuột phải biểu tượng → Thoát để tắt hẳn).
+- Cài đặt mới: bật/tắt thông báo, chu kỳ kiểm tra, tự sao chép mã, thu nhỏ xuống khay.
+
 ## 1.2.0
 - Khi TempMail.Plus đòi captcha, lô **không dừng nữa**: ô "Tôi không phải là người máy"
   hiện ngay trong hộp thoại Tạo lô. Tích xong, lô tự chạy tiếp từ chỗ đang dở.
