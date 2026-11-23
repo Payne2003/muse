@@ -82,15 +82,11 @@ kiểm tra SHA-256 → cài đè ở chế độ im lặng → tự mở lại. 
 
 1. Sửa `__version__` trong `muse/__init__.py`, ví dụ `1.2.0`.
 2. Thêm mục `## 1.2.0` vào `CHANGELOG.md` (nội dung này hiện trong hộp thoại cập nhật).
-3. Commit, rồi tạo và đẩy tag cùng số phiên bản:
+3. Commit và push lên `main` (hoặc nhánh `claude/nifty-feynman-x1nonn`).
 
-```bat
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-GitHub Actions sẽ build và tạo Release `v1.2.0`. Tag phải khớp `__version__`, nếu không
-bản build sẽ báo lỗi.
+GitHub Actions sẽ build và tự tạo Release `v1.2.0` nếu phiên bản này chưa có Release.
+Vài phút sau, ứng dụng trên máy người dùng sẽ hỏi cập nhật. Push mà không đổi phiên bản
+thì chỉ build thử, không phát hành. (Đẩy tag `v1.2.0` cũng phát hành được như trước.)
 
 ## Dữ liệu được lưu ở đâu
 

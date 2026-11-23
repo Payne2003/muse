@@ -18,6 +18,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # Đẩy code lên các nhánh này với phiên bản mới -> tự tạo Release, app người dùng tự cập nhật
+  RELEASE_BRANCHES: "main claude/nifty-feynman-x1nonn"
+
 jobs:
   build:
     runs-on: windows-latest
@@ -79,8 +83,29 @@ jobs:
             dist/MuseMailbox-Setup-*.exe
             dist/MuseMailbox-Portable-*.zip
 
+      - name: Decide whether to publish a release
+        id: rel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=${{ steps.ver.outputs.version }}
+          publish=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            publish=true
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && " $RELEASE_BRANCHES " == *" ${GITHUB_REF#refs/heads/} "* ]]; then
+            # Tự phát hành khi phiên bản trong muse/__init__.py chưa có Release
+            if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release v$v đã tồn tại, bỏ qua."
+            else
+              publish=true
+            fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish (v$v)"
+
       - name: Release notes
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.rel.outputs.publish == 'true'
         shell: bash
         run: |
           v=${{ steps.ver.outputs.version }}
@@ -88,12 +113,15 @@ jobs:
           [ -s CHANGELOG_RELEASE.md ] || echo "Phiên bản $v" > CHANGELOG_RELEASE.md
           cat CHANGELOG_RELEASE.md
 
-      - name: Publish release (on tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish release
+        if: steps.rel.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
           name: Muse Mailbox v${{ steps.ver.outputs.version }}
           body_path: CHANGELOG_RELEASE.md
+          make_latest: true
           files: |
             dist/MuseMailbox-Setup-*.exe
             dist/MuseMailbox-Portable-*.zip
