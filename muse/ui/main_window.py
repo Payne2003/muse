@@ -507,8 +507,11 @@ class MainWindow(QMainWindow):
         def done(d):
             if not self.current or self.current.address != address:
                 return
-            head = (f"<p style='color:#51637a'><b>Từ:</b> {html_mod.escape(d.sender_name)} "
-                    f"&lt;{html_mod.escape(d.sender)}&gt;<br><b>Đến:</b> {html_mod.escape(d.to)}"
+            sender = html_mod.escape(d.sender)
+            if d.sender_name:
+                sender = f"{html_mod.escape(d.sender_name)} &lt;{sender}&gt;"
+            head = (f"<p style='color:#51637a'><b>Từ:</b> {sender}"
+                    f"<br><b>Đến:</b> {html_mod.escape(d.to)}"
                     f"<br><b>Thời gian:</b> {html_mod.escape(d.date)}</p>"
                     f"<h3>{html_mod.escape(d.subject)}</h3><hr>")
             body = d.html or "<pre style='white-space:pre-wrap'>" + html_mod.escape(d.text) + "</pre>"
