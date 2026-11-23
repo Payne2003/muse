@@ -4,10 +4,10 @@ import html as html_mod
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
+from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QFrame, QSystemTrayIcon, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QComboBox, QFileDialog, QInputDialog, QMenu, QTabBar,
+    QCheckBox, QComboBox, QFileDialog, QInputDialog, QMenu, QTabBar,
     QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QSizePolicy, QSplitter,
     QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
 )
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from muse import APP_NAME, __version__
 from muse.core.api import LIFETIMES, CaptchaRequired, TempMailClient, TempMailError, WrongPin, web_url
 from muse.core.secrets import SecretStore
+from muse.core.cleanup import remove_mailboxes
 from muse.core.export import format_list
 from muse.core.services import KIND_LABEL
 from muse.core.storage import Mailbox, Storage, now_iso
@@ -187,6 +188,12 @@ class MainWindow(QMainWindow):
         self.list.currentItemChanged.connect(self._on_select)
         self.list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._list_menu)
+        # Ctrl/Shift + bấm để chọn nhiều hộp; Ctrl+A chọn tất cả; Delete để xoá
+        self.list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.list.itemSelectionChanged.connect(self._on_list_selection)
+        del_sc = QShortcut(QKeySequence.Delete, self.list)
+        del_sc.setContext(Qt.WidgetWithChildrenShortcut)
+        del_sc.activated.connect(self.remove_current)
         sl.addWidget(self.list, 1)
         self.count_label = QLabel()
         self.count_label.setObjectName("muted")
@@ -295,7 +302,8 @@ class MainWindow(QMainWindow):
         self.web_btn.setToolTip("Mở đúng hộp thư này trên tempmail.plus")
         self.web_btn.clicked.connect(lambda: QDesktopServices.openUrl(
             QUrl(web_url(self.current.address if self.current else None))))
-        self.del_btn = QPushButton("Xoá khỏi danh sách")
+        self.del_btn = QPushButton("Xoá hộp thư")
+        self.del_btn.setToolTip("Xoá hộp đang mở, hoặc các hộp đang chọn (Ctrl/Shift + bấm để chọn nhiều)")
         self.del_btn.setObjectName("danger")
         self.del_btn.clicked.connect(self.remove_current)
         for b in (self.refresh_btn, self.verify_btn, self.apply_btn, self.web_btn):
@@ -577,7 +585,28 @@ class MainWindow(QMainWindow):
         menu.addAction("Đánh dấu đã đăng ký…", lambda: self.mark_registered(mb.address))
         if self.storage.registrations(mb.address):
             menu.addAction("Chuyển về Chưa dùng", lambda: self.unmark_registered(mb.address))
+        menu.addSeparator()
+        selected = self._selected_addresses()
+        if mb.address in selected and len(selected) > 1:
+            menu.addAction(f"Xoá {len(selected)} hộp đã chọn…", self.remove_current)
+        else:
+            menu.addAction("Xoá hộp thư này…", lambda: self.remove_mailboxes([mb.address]))
         menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def _selected_addresses(self) -> list[str]:
+        out = []
+        for item in self.list.selectedItems():
+            mb = self.storage.get_mailbox(item.data(Qt.UserRole))
+            if mb:
+                out.append(mb.address)
+        return out
+
+    def _on_list_selection(self) -> None:
+        n = len(self.list.selectedItems())
+        self.del_btn.setText(f"Xoá {n} hộp đã chọn" if n > 1 else "Xoá hộp thư")
+        if n > 1:
+            self.statusBar().showMessage(
+                f"Đã chọn {n} hộp thư · bấm Delete hoặc '{self.del_btn.text()}' để xoá", 5000)
 
     def mark_registered(self, address: str) -> None:
         name, ok = QInputDialog.getItem(
@@ -651,23 +680,51 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Đã xuất {len(regs)} dòng ra {path}", 8000)
 
     def remove_current(self) -> None:
-        mb = self.current
-        if not mb:
+        """Xoá các hộp đang chọn (hoặc hộp đang mở nếu không chọn gì)."""
+        addrs = self._selected_addresses()
+        if not addrs and self.current:
+            addrs = [self.current.address]
+        if addrs:
+            self.remove_mailboxes(addrs)
+
+    def remove_mailboxes(self, addrs: list[str]) -> None:
+        n = len(addrs)
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("Xoá hộp thư")
+        shown = "\n".join(f"• {a}" for a in addrs[:8]) + (f"\n… và {n - 8} hộp khác" if n > 8 else "")
+        box.setText(f"Xoá {n} hộp thư không dùng nữa?\n\n{shown}")
+        box.setInformativeText(
+            "Hộp sẽ bị xoá khỏi ứng dụng, kèm PIN, địa chỉ bí mật và dấu đã đăng ký đã lưu.\n"
+            "Lưu ý: địa chỉ trên TempMail.Plus không thể xoá hẳn — ai biết địa chỉ vẫn có thể "
+            "gửi thư tới đó.")
+        wipe = QCheckBox("Xoá luôn toàn bộ thư của các hộp này trên TempMail.Plus")
+        box.setCheckBox(wipe)
+        ok = box.addButton(f"Xoá {n} hộp" if n > 1 else "Xoá", QMessageBox.DestructiveRole)
+        box.addButton("Huỷ", QMessageBox.RejectRole)
+        box.setDefaultButton(QMessageBox.NoButton)
+        box.exec()
+        if box.clickedButton() is not ok:
             return
-        if QMessageBox.question(
-                self, "Xoá khỏi danh sách",
-                f"Xoá {mb.address} khỏi danh sách trên máy?\n"
-                "PIN và địa chỉ bí mật đã lưu cũng sẽ bị xoá. Hộp thư trên TempMail.Plus không bị ảnh hưởng."
-        ) != QMessageBox.Yes:
-            return
-        self.secrets.forget(mb.address)
-        self.storage.forget_mailbox_mails(mb.address)
-        self.storage.delete_mailbox(mb.id)
-        self.current = None
-        self.mails.setRowCount(0)
-        self.viewer.clear()
-        self.reload_list()
-        self._render_detail()
+        client = self.client if wipe.isChecked() else None
+
+        def done(res):
+            if self.current and self.current.address in res.removed:
+                self.current = None
+                self.mails.setRowCount(0)
+                self.viewer.clear()
+            self.reload_list()
+            self._render_detail()
+            msg = f"Đã xoá {len(res.removed)} hộp thư"
+            if client is not None:
+                msg += f", xoá {res.cleared_mails} thư trên TempMail.Plus"
+            if res.remote_errors:
+                msg += f" ({len(res.remote_errors)} hộp không xoá được thư trên trang)"
+            self.statusBar().showMessage(msg, 8000)
+
+        self.statusBar().showMessage(f"Đang xoá {n} hộp thư…")
+        run_async(lambda: remove_mailboxes(self.storage, self.secrets, addrs, client), done,
+                  lambda e: self._net_error(e))
 
     def verify(self, address: str) -> None:
         """Đọc lại cài đặt từ TempMail.Plus; chỉ khi đọc được mới đánh dấu Đã áp dụng."""

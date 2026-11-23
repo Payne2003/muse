@@ -237,6 +237,17 @@ class TempMailClient:
     def destroy_inbox(self, email: str, first_id: int = 0, epin: str = "") -> None:
         self._call("DELETE", "/api/mails/", {"email": email, "first_id": first_id, "epin": epin})
 
+    def clear_inbox(self, email: str, epin: str = "") -> int:
+        """Xoá toàn bộ thư trong hộp (giống nút "Destroy inbox" trên trang).
+        Trả về số thư có trước khi xoá; 0 nếu hộp trống."""
+        j = self._call("GET", "/api/mails", {"email": email, "limit": 100, "epin": epin})
+        mails = j.get("mail_list") or []
+        first_id = j.get("first_id") or (max(int(m.get("mail_id", 0)) for m in mails) if mails else 0)
+        if not mails or not first_id:
+            return 0
+        self.destroy_inbox(email, first_id=int(first_id), epin=epin)
+        return len(mails)
+
 
 def _recipient(j: dict) -> str:
     """Địa chỉ thư được gửi tới (tên trường có thể khác nhau giữa các phiên bản API)."""

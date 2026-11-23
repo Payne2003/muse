@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+- **Xoá nhiều hộp thư cùng lúc**: giữ Ctrl/Shift để chọn nhiều hộp (Ctrl+A chọn tất cả),
+  rồi bấm phím **Delete**, nút **Xoá N hộp đã chọn**, hoặc chuột phải → **Xoá**.
+- Hộp thoại xác nhận có tuỳ chọn **xoá luôn toàn bộ thư trên TempMail.Plus**.
+- Khi xoá, PIN, địa chỉ bí mật và dấu đã đăng ký của hộp cũng được xoá khỏi máy.
+
 ## 1.4.0
 - **Tách hộp thư đã đăng ký**: danh sách bên trái có 2 thẻ **Chưa dùng** và **Đã đăng ký**.
   Hộp nào nhận thư xác nhận / mã, thư chào mừng hoặc thư đăng nhập từ một dịch vụ sẽ tự chuyển
