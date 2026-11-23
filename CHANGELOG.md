@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.2
+- **Sửa lỗi không xác minh được captcha** khi tạo lô (không tích "Tạo nhanh"): bảng
+  **chọn hình ảnh** của reCAPTCHA bị lớp nền của ứng dụng che mất, nên tích xong không thấy gì.
+  Nay bảng hình hiện đè lên trên để bạn làm.
+- Khung captcha to hơn, đủ chỗ cho bảng chọn hình.
+- Nhật ký lô ghi rõ: đang chờ tích / đã xác minh / trang không chấp nhận, hãy tích lại.
+
 ## 1.4.1
 - **Xoá nhiều hộp thư cùng lúc**: giữ Ctrl/Shift để chọn nhiều hộp (Ctrl+A chọn tất cả),
   rồi bấm phím **Delete**, nút **Xoá N hộp đã chọn**, hoặc chuột phải → **Xoá**.

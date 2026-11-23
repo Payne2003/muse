@@ -50,7 +50,8 @@ _CAPTCHA_JS = """
   window.__museTok = null;
   var old = document.getElementById('muse-cap'); if (old) old.remove();
   var d = document.createElement('div'); d.id = 'muse-cap';
-  d.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:2147483647;background:#fff;' +
+  // z-index phải THẤP hơn bảng chọn hình của reCAPTCHA (2000000000), nếu không bảng hình bị che
+  d.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:100000;background:#fff;' +
     'display:flex;flex-direction:column;align-items:center;padding-top:18px;' +
     'font:15px Segoe UI,Arial,sans-serif;color:#12355b;overflow:auto';
   d.innerHTML = '<p style="margin:0 16px 14px;text-align:center">TempMail.Plus cần xác minh. ' +
@@ -126,7 +127,7 @@ class WebBridge(QObject):
         self.page = QWebEnginePage(self.profile, self)
         self.view = QWebEngineView()
         self.view.setPage(self.page)
-        self.view.setMinimumSize(380, 520)
+        self.view.setMinimumSize(420, 640)  # đủ chỗ cho bảng chọn hình của reCAPTCHA
         self.page.loadFinished.connect(self._on_loaded)
 
         self._poll = QTimer(self)

@@ -62,6 +62,7 @@ class BatchCreator:
         # nhận thư ngay), không lưu thời hạn/PIN nên không cần captcha.
         self.save_settings = save_settings
         self._stop = threading.Event()
+        self._log: Callable[[str], None] = lambda m: None
 
     def stop(self) -> None:
         self._stop.set()
@@ -87,10 +88,15 @@ class BatchCreator:
             except CaptchaRequired:
                 if self.solve_captcha is None or self._stop.is_set():
                     raise
+                if token:
+                    self._log("TempMail.Plus không chấp nhận lần xác minh vừa rồi, hãy tích lại.")
+                else:
+                    self._log("TempMail.Plus yêu cầu captcha, đang chờ bạn tích…")
                 token = self.solve_captcha()
                 if not token:
                     raise CaptchaRequired("Chưa xác minh captcha")
                 self.captchas_solved += 1
+                self._log("Đã xác minh captcha, đang gửi lại…")
         raise CaptchaRequired("TempMail.Plus vẫn yêu cầu captcha sau khi xác minh")
 
     def create_quick(self, batch_id: int | None = None) -> Mailbox:
@@ -134,6 +140,7 @@ class BatchCreator:
     def run(self, on_progress: Callable[[int, int, Mailbox | None], None] | None = None,
             on_log: Callable[[str], None] | None = None) -> BatchResult:
         log = on_log or (lambda m: None)
+        self._log = log
         batch = self.storage.start_batch(self.count, self.ttl, bool(self.pin))
         created = 0
         failures = 0
