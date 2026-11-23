@@ -18,6 +18,8 @@ UninstallDisplayIcon={app}\MuseMailbox.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=yes
+RestartApplications=no
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
@@ -35,3 +37,5 @@ Name: "{autodesktop}\Muse Mailbox"; Filename: "{app}\MuseMailbox.exe"; Tasks: de
 
 [Run]
 Filename: "{app}\MuseMailbox.exe"; Description: "Mở Muse Mailbox"; Flags: nowait postinstall skipifsilent
+; Cập nhật tự động chạy bộ cài ở chế độ /SILENT -> mở lại ứng dụng sau khi cài xong
+Filename: "{app}\MuseMailbox.exe"; Flags: nowait skipifnotsilent

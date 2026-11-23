@@ -95,7 +95,8 @@ class AppSettings:
 
 # --------------------------------------------------------------------------- settings
 class SettingsDialog(QDialog):
-    def __init__(self, settings: AppSettings, secrets: SecretStore, parent=None):
+    def __init__(self, settings: AppSettings, secrets: SecretStore, parent=None,
+                 auto_update: bool = True):
         super().__init__(parent)
         self.setWindowTitle("Cài đặt")
         self.settings = settings
@@ -113,6 +114,9 @@ class SettingsDialog(QDialog):
         form.addRow("", self.pin)
         form.addRow("Tên miền mặc định", self.domain)
         form.addRow("Nghỉ giữa 2 lần tạo", self.delay)
+        self.auto_update = QCheckBox("Tự động kiểm tra và cài bản cập nhật")
+        self.auto_update.setChecked(auto_update)
+        form.addRow("Cập nhật", self.auto_update)
         lay.addLayout(form)
         store = ("Windows Credential Manager" if secrets.persistent
                  else "bộ nhớ tạm (Credential Manager không khả dụng)")

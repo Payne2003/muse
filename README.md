@@ -72,6 +72,26 @@ Kết quả: `dist\MuseMailbox\MuseMailbox.exe`. Bộ cài đặt (tuỳ chọn)
 GitHub Actions (`.github/workflows/build-windows.yml`) tự chạy test, build `.exe`, tạo bản
 portable `.zip` và bộ cài đặt; đẩy tag `v1.0.0` để tạo Release.
 
+## Tự cập nhật
+
+Ứng dụng kiểm tra bản mới trên GitHub Releases của repo này khi mở và mỗi 6 giờ (tắt được
+trong **Cài đặt**). Khi có bản mới: hỏi người dùng → tải `MuseMailbox-Setup-X.Y.Z.exe` →
+kiểm tra SHA-256 → cài đè ở chế độ im lặng → tự mở lại. Bản portable thì mở trang tải về.
+
+**Cách phát hành bản mới** (máy người dùng sẽ tự nhận):
+
+1. Sửa `__version__` trong `muse/__init__.py`, ví dụ `1.2.0`.
+2. Thêm mục `## 1.2.0` vào `CHANGELOG.md` (nội dung này hiện trong hộp thoại cập nhật).
+3. Commit, rồi tạo và đẩy tag cùng số phiên bản:
+
+```bat
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+GitHub Actions sẽ build và tạo Release `v1.2.0`. Tag phải khớp `__version__`, nếu không
+bản build sẽ báo lỗi.
+
 ## Dữ liệu được lưu ở đâu
 
 | Dữ liệu | Vị trí |

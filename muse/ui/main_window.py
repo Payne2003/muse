@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QSplitter,
+    QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QSizePolicy, QSplitter,
     QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
 )
 
@@ -18,6 +18,7 @@ from muse.core.storage import Mailbox, Storage, now_iso
 
 from .dialogs import (AddExistingDialog, AppSettings, ApplySettingsDialog, BatchDialog,
                       ManualCreateDialog, SettingsDialog)
+from .updater_ui import UpdateController
 from .workers import run_async
 
 REFRESH_MS = 20_000
@@ -98,6 +99,13 @@ class MainWindow(QMainWindow):
         self.timer.setInterval(REFRESH_MS)
         self.timer.timeout.connect(lambda: self.refresh_mails(silent=True))
         self.timer.start()
+        self.updater = UpdateController(storage, self)
+        self.updater.available.connect(self._on_update_available)
+        self.updater.start()
+
+    def _on_update_available(self, info) -> None:
+        self.update_act.setText(f"⬆ Cập nhật lên v{info.version}")
+        self.update_act.setVisible(True)
 
     # ================================================================ layout
     def _build(self) -> None:
@@ -110,6 +118,16 @@ class MainWindow(QMainWindow):
             act = QAction(text, self)
             act.triggered.connect(slot)
             tb.addAction(act)
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        tb.addWidget(spacer)
+        self.update_act = QAction("Cập nhật", self)
+        self.update_act.triggered.connect(lambda: self.updater.prompt())
+        tb.addAction(self.update_act)
+        self.update_act.setVisible(False)
+        check = QAction("Kiểm tra cập nhật", self)
+        check.triggered.connect(lambda: self.updater.check(silent=False))
+        tb.addAction(check)
 
         split = QSplitter()
         split.setChildrenCollapsible(False)
@@ -365,7 +383,9 @@ class MainWindow(QMainWindow):
         self.reload_list()
 
     def open_settings(self) -> None:
-        SettingsDialog(self.settings, self.secrets, self).exec()
+        dlg = SettingsDialog(self.settings, self.secrets, self, auto_update=self.updater.auto)
+        if dlg.exec() == SettingsDialog.Accepted and dlg.auto_update.isChecked() != self.updater.auto:
+            self.updater.auto = dlg.auto_update.isChecked()
 
     def remove_current(self) -> None:
         mb = self.current
