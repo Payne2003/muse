@@ -211,3 +211,10 @@ def test_batch_stops_when_user_skips_captcha(tmp_path):
     assert res.status == STATUS_CAPTCHA and res.created == 2
     assert len(storage.list_mailboxes()) == 2
     storage.close()
+
+
+def test_web_url_opens_exact_mailbox():
+    from muse.core.api import web_url
+    assert web_url("Ku29TClac9@merepost.com") == "https://tempmail.plus/en/?ku29tclac9@merepost.com"
+    assert web_url() == "https://tempmail.plus/"
+    assert web_url("not-an-address") == "https://tempmail.plus/"

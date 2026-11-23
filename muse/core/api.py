@@ -249,5 +249,9 @@ def _recipient(j: dict) -> str:
     return ""
 
 
-def web_url() -> str:
+def web_url(address: str | None = None) -> str:
+    """Link mở trang tempmail.plus. Có ``address`` thì mở thẳng đúng hộp thư đó
+    (trang đọc địa chỉ sau dấu ``?``, vd https://tempmail.plus/en/?abc@mailto.plus)."""
+    if address and is_valid_address(address):
+        return f"{BASE_URL}/en/?{address.strip().lower()}"
     return BASE_URL + "/"

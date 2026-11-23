@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2
+- Nút **Mở trên web** mở thẳng đúng hộp thư đang chọn trên tempmail.plus
+  (link dạng `https://tempmail.plus/en/?ten@tenmien`), không cần gõ lại tên và chọn tên miền.
+- Danh sách Mã xác nhận có thêm nút **Mở trên web** cho hộp thư của dòng đang chọn.
+
 ## 1.3.1
 - Thông báo mã xác nhận ghi **tên hộp thư trên trang tempmail.plus** trước tiên
   (vd `Hộp thư: ku29tclac9@merepost.com`), kèm dòng "gửi qua địa chỉ bí mật …" nếu

@@ -242,7 +242,9 @@ class MainWindow(QMainWindow):
         self.apply_btn = QPushButton("Đổi thời hạn / PIN")
         self.apply_btn.clicked.connect(self.change_settings)
         self.web_btn = QPushButton("Mở trên web")
-        self.web_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(web_url())))
+        self.web_btn.setToolTip("Mở đúng hộp thư này trên tempmail.plus")
+        self.web_btn.clicked.connect(lambda: QDesktopServices.openUrl(
+            QUrl(web_url(self.current.address if self.current else None))))
         self.del_btn = QPushButton("Xoá khỏi danh sách")
         self.del_btn.setObjectName("danger")
         self.del_btn.clicked.connect(self.remove_current)

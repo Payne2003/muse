@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QGuiApplication, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QObject, QRectF, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QGuiApplication, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QDialog, QHBoxLayout, QHeaderView, QLabel, QMenu,
                                QPushButton, QSystemTrayIcon, QTableWidget, QTableWidgetItem,
                                QVBoxLayout)
 
 from muse import APP_NAME
+from muse.core.api import web_url
 from muse.core.watcher import CodeEvent, MailWatcher
 
 from .workers import run_async
@@ -99,10 +100,13 @@ class CodesDialog(QDialog):
         acc.clicked.connect(lambda: self._copy(col="mailbox"))
         open_btn = QPushButton("Mở hộp thư")
         open_btn.clicked.connect(self._open)
+        web_btn = QPushButton("Mở trên web")
+        web_btn.setToolTip("Mở đúng hộp thư này trên tempmail.plus")
+        web_btn.clicked.connect(self._open_web)
         close = QPushButton("Đóng")
         close.clicked.connect(self.accept)
         row.addWidget(self.info, 1)
-        for b in (copy, acc, open_btn, close):
+        for b in (copy, acc, open_btn, web_btn, close):
             row.addWidget(b)
         lay.addLayout(row)
         self.rows: list[dict] = []
@@ -137,6 +141,11 @@ class CodesDialog(QDialog):
         if c and c.get(col):
             QGuiApplication.clipboard().setText(c[col])
             self.info.setText(f"Đã sao chép {c[col]}")
+
+    def _open_web(self) -> None:
+        c = self._current()
+        if c:
+            QDesktopServices.openUrl(QUrl(web_url(c["mailbox"])))
 
     def _open(self) -> None:
         c = self._current()
